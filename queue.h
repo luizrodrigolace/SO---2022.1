@@ -34,7 +34,7 @@ size_t Queue_sizeof(u32 len) {
 }
 
 void Queue_init(Queue *q, u32 len) {
-    q->len = len;
+    q->len = len + 1;
     q->fst = 0;
     q->lst = 0;
 }
