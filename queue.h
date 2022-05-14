@@ -30,7 +30,7 @@ void Queue_debug(Queue *, FILE *);
 #ifdef __QUEUE_IMPL__
 
 size_t Queue_sizeof(u32 len) {
-    return sizeof(Queue) + sizeof(((Queue *)0)->data[0])*len;
+    return sizeof(Queue) + sizeof(((Queue *)0)->data[0])*(len+1);
 }
 
 void Queue_init(Queue *q, u32 len) {
