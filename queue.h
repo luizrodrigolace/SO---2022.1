@@ -21,11 +21,12 @@ typedef struct _Queue {
 
 size_t Queue_sizeof(u32);
 void Queue_init(Queue *, u32);
-b32 Queue_is_empty(Queue *);
-b32 Queue_is_full(Queue *);
+b32 Queue_is_empty(const Queue *);
+b32 Queue_is_full(const Queue *);
 Queue_Err Queue_enqueue(Queue *, u32);
 Queue_Ret Queue_dequeue(Queue *);
-void Queue_debug(Queue *, FILE *);
+Queue_Ret Queue_peek(const Queue *);
+void Queue_debug(const Queue *, FILE *);
 
 #ifdef __QUEUE_IMPL__
 
@@ -39,11 +40,11 @@ void Queue_init(Queue *q, u32 len) {
     q->lst = 0;
 }
 
-inline b32 Queue_is_empty(Queue *q) {
+inline b32 Queue_is_empty(const Queue *q) {
     return q->fst == q->lst;
 }
 
-inline b32 Queue_is_full(Queue *q) {
+inline b32 Queue_is_full(const Queue *q) {
     return q->fst == (q->lst + 1) % q->len;
 }
 
@@ -71,6 +72,18 @@ Queue_Ret Queue_dequeue(Queue *q) {
     }
 }
 
+Queue_Ret Queue_peek(const Queue *q) {
+    Queue_Ret ret = { .err = Queue_Ok, .data = 0 };
+    const u32 fst = q->fst;
+    if ( Queue_is_empty(q) ) {
+        ret.err = Queue_Empty;
+        return ret;
+    } else {
+        ret.data = q->data[fst];
+        return ret;
+    }
+}
+
 #ifndef QUEUE_DEBUG_COL
 #define QUEUE_DEBUG_COL             15
 #endif // QUEUE_DEBUG_COL
@@ -91,7 +104,7 @@ Queue_Ret Queue_dequeue(Queue *q) {
 #define QUEUE_DEBUG_NO_LST_PREFIX   ""
 #endif // QUEUE_DEBUG_NO_LST_PREFIX
 
-void Queue_debug(Queue *q, FILE* f) {
+void Queue_debug(const Queue *q, FILE* f) {
     const u32 len = q->len, fst = q->fst, lst = q->lst;
     fprintf(f, "DEBUG: Queue {\n");
     fprintf(f, "    .len = %hu,\n", len);
