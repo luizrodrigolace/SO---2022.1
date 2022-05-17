@@ -35,10 +35,10 @@ Roda_Ret roda(PID pid, time served) {
  * retorna true (!= 0) se a simulação vai continuar,
  * retorna false (0) se a simulação terminou */
 b32 espera(Queue *qs, const u32 numq,
-        Queue *qios,
+        Queue *qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb) {
     (void) qs;   (void) numq;
-    (void) qios;
+    (void) qios; (void) iodevs;
     (void) pcbs; (void) numpcb;
     // TODO: esperar o tempo passar,
     // ou seja, até chegar alguém (novo ou bloqueado)
@@ -55,6 +55,42 @@ b32 new_process(time t, PID *pid) {
     return 0;
 }
 
+static inline
+void handle_new_processes(time curr_time,
+        Queue *qs, const u32 numq,
+        PCB *pcbs, const u32 numpcb) {
+    assert( numq > 0 );
+    PID new_pid;
+    while ( new_process(curr_time, &new_pid) ) {
+        assert( new_pid < numpcb );
+        PCB new_pcb = {
+            .status = p_ready,
+            .pid = new_pid,
+            .start_time = curr_time,
+            .end_time = 0,
+            .running_time = 0,
+            .priority = 0,
+        };
+        pcbs[new_pid] = new_pcb;
+        const Queue_Err qerr =
+            Queue_enqueue(qs + 0, new_pid);
+        assert( qerr == Queue_Ok );
+    }
+}
+
+static inline
+void handle_blocked_processes(time curr_time,
+        Queue *qs, const u32 numq,
+        Queue *qios, IODev *iodevs,
+        PCB *pcbs, const u32 numpcb) {
+    (void) curr_time;
+    (void) qs; (void) numq;
+    (void) qios; (void) iodevs;
+    (void) pcbs; (void) numpcb;
+
+    // TODO: dar enqueue nos processos que chegaram (IO)
+}
+
 void robinfeedback(Queue *qs, const u32 numq,
         Queue *qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb) {
@@ -64,6 +100,13 @@ void robinfeedback(Queue *qs, const u32 numq,
     time curr_time = 0;
     b32 is_done = 1;
     while ( is_done ) {
+
+        handle_new_processes(curr_time,
+                qs, numq, pcbs, numpcb);
+
+        handle_blocked_processes(curr_time,
+                qs, numq, qios, iodevs, pcbs, numpcb);
+
         u32 first_not_empty = 0;
         for ( ; first_not_empty < numq; first_not_empty++ ) {
             if ( !Queue_is_empty(qs + first_not_empty) )
@@ -105,23 +148,11 @@ void robinfeedback(Queue *qs, const u32 numq,
                     } break;
                 }
 
-                PID new_pid;
-                while ( new_process(curr_time, &new_pid) ) {
-                    assert( new_pid < numpcb );
-                    PCB new_pcb = {
-                        .status = p_ready,
-                        .pid = new_pid,
-                        .start_time = curr_time + slice,
-                        .end_time = 0,
-                        .running_time = 0,
-                        .priority = 0,
-                    };
-                    pcbs[new_pid] = new_pcb;
-                    const Queue_Err qerr =
-                        Queue_enqueue(qs + new_pid, pid);
-                    assert( qerr == Queue_Ok );
-                }
-                // TODO: dar enqueue nos processos que chegaram (IO)
+                handle_new_processes(curr_time + slice,
+                        qs, numq, pcbs, numpcb);
+
+                handle_blocked_processes(curr_time + slice,
+                        qs, numq, qios, iodevs, pcbs, numpcb);
             }
 
             pcbs[pid].running_time += slice;
@@ -149,10 +180,7 @@ void robinfeedback(Queue *qs, const u32 numq,
         } else {
             // Não temos ninguém para rodar
 
-            // TODO: dar enqueue nos processos que chegaram (novos)
-            // TODO: dar enqueue nos processos que chegaram (IO)
-
-            is_done = espera(qs, numq, qios, pcbs, numpcb);
+            is_done = espera(qs, numq, qios, iodevs, pcbs, numpcb);
 
             curr_time += 1;
         }
