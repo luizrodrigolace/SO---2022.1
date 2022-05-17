@@ -1,13 +1,13 @@
 CC = gcc
 CFLAGS = -Wall -Wextra
 
-all: run
+all: run_exe
 
-run: main
-	./main
+run_exe: run
+	./run
 
-main: main.c queue.h premissas.h types.h
+run: main.c queue.h premissas.h types.h
 	${CC} ${CFLAGS} main.c -o $@
 
 clean:
-	rm -f *.out main
+	rm -f *.out run
