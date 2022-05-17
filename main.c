@@ -7,6 +7,10 @@
 #define __QUEUE_IMPL__
 #include "queue.h"
 
+// Tabelas de entrada
+static CTable cheat_table;
+static CIO *cheat_io_table;
+
 typedef enum _Roda_Status {
     Roda_Done = 0, Roda_NotDone, Roda_IO
 } Roda_Status;

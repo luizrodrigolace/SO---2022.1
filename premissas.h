@@ -57,3 +57,21 @@ typedef struct _PCB {
     time running_time;
     u8 priority;
 } PCB;
+
+// Tabela de Entrada
+typedef struct _CIO {
+    IO_t io_type;
+    time begin;
+} CIO;
+
+typedef struct _CLine {
+    time start;
+    time service;
+    u16 io_start;
+    u16 io_count;
+} CLine;
+
+typedef struct _CTable {
+    PID len;
+    CLine lines[];
+} CTable;
