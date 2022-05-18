@@ -26,41 +26,79 @@ typedef struct _Roda_Ret {
  *  * Recebeu timeout; ou
  *  * Vai fazer IO.
  */
-Roda_Ret roda(PID pid, time served) {
-    (void) pid; (void) served;
+Roda_Ret roda(const PID pid, const time served) {
     Roda_Ret ret = {
-        .status = Roda_Done,
+        .status = Roda_NotDone,
         .io_type = IO_count,
     };
-    return ret;
+    const CLine cheat_line = cheat_table.lines[pid];
+    assert( cheat_line.service > 0 );
+    assert( served <= cheat_line.service );
+    if ( served == cheat_line.service ) {
+        ret.status = Roda_Done;
+        return ret;
+    } else {
+        u16 io_i = cheat_line.io_start;
+        for ( u16 i = 0; i < cheat_line.io_count; i++ ) {
+            const CIO cheat_io = cheat_io_table[io_i + i];
+            if ( served > cheat_io.begin ) {
+                break;
+            } else if ( served == cheat_io.begin ) {
+                assert( cheat_io.io_type < IO_count );
+                ret.status = Roda_IO;
+                ret.io_type = cheat_io.io_type;
+                break;
+            }
+        }
+        return ret;
+    }
 }
 
 /* espera algum processo chegar (CPU está ociosa):
  * retorna true (!= 0) se a simulação vai continuar,
  * retorna false (0) se a simulação terminou */
-b32 espera(Queue *qs, const u32 numq,
-        Queue *qios, IODev *iodevs,
-        PCB *pcbs, const u32 numpcb) {
-    (void) qs;   (void) numq;
-    (void) qios; (void) iodevs;
-    (void) pcbs; (void) numpcb;
-    // TODO: esperar o tempo passar,
-    // ou seja, até chegar alguém (novo ou bloqueado)
-    return 0;
+b32 espera(const time t, const PCB *pcbs, const u32 numpcb) {
+    assert( cheat_table.len == numpcb );
+    const PID last_pid = cheat_table.len - 1;
+    const CLine last_pid_line = cheat_table.lines[last_pid];
+    const time last_start = last_pid_line.start;
+    const time last_service = last_pid_line.service;
+    if ( t < last_start + last_service ) {
+        return 1;
+    } else {
+        static PID last_pid_not_done = 0;
+        for ( ; last_pid_not_done < numpcb; last_pid_not_done++ ) {
+            if ( pcbs[last_pid_not_done].status != p_done )
+                break;
+        }
+        return pcbs[last_pid_not_done].status == p_done;
+    }
 }
 
 /* verifica se algum processo chegou no tempo t.
- * (similar a espera)
- * retorna true (!= 0) se a simulação vai continuar,
- * retorna false (0) se a simulação terminou
- * retorna no ppid o novo pid */
-b32 new_process(time t, PID *pid) {
-    (void) t; (void) pid;
-    return 0;
+ * retorna true (!= 0) se chegou um novo processo,
+ * retorna false (0) se não chegou um novo processo.
+ * retorna no pid o pid do processo que acabou de chegar */
+b32 new_process(const time t, PID *pid) {
+    static PID last_pid_not_started = 0;
+    if ( last_pid_not_started < cheat_table.len ) {
+        const time next_start =
+            cheat_table.lines[last_pid_not_started].start;
+        if ( t == next_start ) {
+            *pid = last_pid_not_started;
+            last_pid_not_started += 1;
+            return 1;
+        } else {
+            assert( t < next_start );
+            return 0;
+        }
+    } else {
+        return 0;
+    }
 }
 
 static inline
-void handle_new_processes(time curr_time,
+void handle_new_processes(const time curr_time,
         Queue *qs, const u32 numq,
         PCB *pcbs, const u32 numpcb) {
     assert( numq > 0 );
@@ -83,7 +121,7 @@ void handle_new_processes(time curr_time,
 }
 
 static inline
-void handle_blocked_processes(time curr_time,
+void handle_blocked_processes(const time curr_time,
         Queue *qs, const u32 numq,
         Queue *qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb) {
@@ -93,6 +131,7 @@ void handle_blocked_processes(time curr_time,
     (void) pcbs; (void) numpcb;
 
     // TODO: dar enqueue nos processos que chegaram (IO)
+    // TODO: not implemented
 }
 
 void robinfeedback(Queue *qs, const u32 numq,
@@ -184,7 +223,7 @@ void robinfeedback(Queue *qs, const u32 numq,
         } else {
             // Não temos ninguém para rodar
 
-            is_done = espera(qs, numq, qios, iodevs, pcbs, numpcb);
+            is_done = espera(curr_time, pcbs, numpcb);
 
             curr_time += 1;
         }
