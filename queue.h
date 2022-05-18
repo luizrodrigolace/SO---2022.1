@@ -23,6 +23,7 @@ size_t Queue_sizeof(u32);
 void Queue_init(Queue *, u32);
 b32 Queue_is_empty(const Queue *);
 b32 Queue_is_full(const Queue *);
+u32 Queue_size(const Queue *);
 Queue_Err Queue_enqueue(Queue *, u32);
 Queue_Ret Queue_dequeue(Queue *);
 Queue_Ret Queue_peek(const Queue *);
@@ -46,6 +47,10 @@ inline b32 Queue_is_empty(const Queue *q) {
 
 inline b32 Queue_is_full(const Queue *q) {
     return q->fst == (q->lst + 1) % q->len;
+}
+
+inline u32 Queue_size(const Queue *q) {
+    return (q->lst - q->fst + q->len) % q->len;
 }
 
 Queue_Err Queue_enqueue(Queue *q, u32 thing) {
@@ -107,9 +112,12 @@ Queue_Ret Queue_peek(const Queue *q) {
 void Queue_debug(const Queue *q, FILE* f) {
     const u32 len = q->len, fst = q->fst, lst = q->lst;
     fprintf(f, "DEBUG: Queue {\n");
-    fprintf(f, "    .len = %hu,\n", len);
-    fprintf(f, "    .fst = %hu,\n", fst);
-    fprintf(f, "    .lst = %hu,\n", lst);
+    fprintf(f, "    .len = %u,\n", len);
+    fprintf(f, "    .fst = %u,\n", fst);
+    fprintf(f, "    .lst = %u,\n", lst);
+    fprintf(f, "    (is_empty) = %u,\n", Queue_is_empty(q));
+    fprintf(f, "    (is_full)  = %u,\n", Queue_is_full(q));
+    fprintf(f, "    (size)     = %u,\n", Queue_size(q));
     fprintf(f, "    .data = {");
     for ( u32 i = 0; i < len; i++ ) {
         u32 thing = q->data[i];
