@@ -8,7 +8,7 @@
 #include "queue.h"
 
 // Tabelas de entrada
-static CTable cheat_table;
+static CTable *cheat_table;
 static CIO *cheat_io_table;
 
 typedef enum _Roda_Status {
@@ -31,7 +31,7 @@ Roda_Ret roda(const PID pid, const time served) {
         .status = Roda_NotDone,
         .io_type = IO_count,
     };
-    const CLine cheat_line = cheat_table.lines[pid];
+    const CLine cheat_line = cheat_table->lines[pid];
     assert( cheat_line.service > 0 );
     assert( served <= cheat_line.service );
     if ( served == cheat_line.service ) {
@@ -58,9 +58,9 @@ Roda_Ret roda(const PID pid, const time served) {
  * retorna true (!= 0) se a simulação vai continuar,
  * retorna false (0) se a simulação terminou */
 b32 espera(const time t, const PCB *pcbs, const u32 numpcb) {
-    assert( cheat_table.len == numpcb );
-    const PID last_pid = cheat_table.len - 1;
-    const CLine last_pid_line = cheat_table.lines[last_pid];
+    assert( cheat_table->len == numpcb );
+    const PID last_pid = cheat_table->len - 1;
+    const CLine last_pid_line = cheat_table->lines[last_pid];
     const time last_start = last_pid_line.start;
     const time last_service = last_pid_line.service;
     if ( t < last_start + last_service ) {
@@ -71,7 +71,7 @@ b32 espera(const time t, const PCB *pcbs, const u32 numpcb) {
             if ( pcbs[last_pid_not_done].status != p_done )
                 break;
         }
-        return pcbs[last_pid_not_done].status == p_done;
+        return pcbs[last_pid_not_done].status != p_done;
     }
 }
 
@@ -81,9 +81,9 @@ b32 espera(const time t, const PCB *pcbs, const u32 numpcb) {
  * retorna no pid o pid do processo que acabou de chegar */
 b32 new_process(const time t, PID *pid) {
     static PID last_pid_not_started = 0;
-    if ( last_pid_not_started < cheat_table.len ) {
+    if ( last_pid_not_started < cheat_table->len ) {
         const time next_start =
-            cheat_table.lines[last_pid_not_started].start;
+            cheat_table->lines[last_pid_not_started].start;
         if ( t == next_start ) {
             *pid = last_pid_not_started;
             last_pid_not_started += 1;
@@ -135,7 +135,7 @@ void handle_blocked_processes(const time curr_time,
                 const IO_Ctx ctx = iodevs[i].ctx[idx];
                 const PID pid = ctx.pid;
                 assert( pid < numpcb );
-                assert( ctx.finish_IO <= curr_time );
+                assert( curr_time <= ctx.finish_IO );
                 if ( ctx.finish_IO == curr_time ) {
                     const Queue_Ret qret_clone =
                         Queue_dequeue(iodevs[i].q);
@@ -185,7 +185,6 @@ void handle_blocked_processes(const time curr_time,
 void robinfeedback(Queue **qs, const u32 numq,
         Queue **qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb) {
-    return;
     assert( numq == 2 );
     assert( numpcb <= MAX_PID );
 
@@ -285,12 +284,6 @@ void robinfeedback(Queue **qs, const u32 numq,
     }
 }
 
-void read_input(u32 *numpcb, u32 *numios) {
-    (void) numpcb;
-    (void) numios;
-    printf("reading input... (but not!)\n");
-}
-
 void* alloc_or_exit(const char *prefix, const size_t size) {
     void *ptr = malloc(size);
     if ( !ptr ) {
@@ -299,6 +292,59 @@ void* alloc_or_exit(const char *prefix, const size_t size) {
         exit(1);
     }
     return ptr;
+}
+
+void read_input(u32 *numpcb, u32 *numios) {
+    (void) numpcb;
+    (void) numios;
+    printf("reading input... (but not!)\n");
+
+    // Tabela hard coded
+    const PID len = 2;
+    const u32 nios = 3;
+    cheat_table = (CTable *) alloc_or_exit("cheat_table",
+            sizeof(CTable) + len*sizeof(CLine));
+    cheat_table->len = len;
+    CLine p0 = {
+        .start = 0,
+        .service = 2*TIME_SLICE + TIME_SLICE/2,
+        .io_start = 0,
+        .io_count = 2,
+    },
+    p1 = {
+        .start = 0,
+        .service = 2*TIME_SLICE - TIME_SLICE/2,
+        .io_start = 2,
+        .io_count = 1,
+    };
+    cheat_table->lines[0] = p0;
+    cheat_table->lines[1] = p1;
+
+    cheat_io_table = (CIO *) alloc_or_exit("cheat_io)table",
+            nios*sizeof(CIO));
+    CIO p0_io0 = {
+        .io_type = IO_Tape,
+        .begin = 3,
+    },
+    p0_io1 = {
+        .io_type = IO_Disk,
+        .begin = 7,
+    },
+    p1_io0 = {
+        .io_type = IO_Printer,
+        .begin = 5,
+    };
+    cheat_io_table[0] = p0_io0;
+    cheat_io_table[1] = p0_io1;
+    cheat_io_table[2] = p1_io0;
+
+    *numpcb = len;
+    *numios = nios;
+}
+
+void unread_input() {
+    free(cheat_table);
+    free(cheat_io_table);
 }
 
 int main() {
@@ -319,6 +365,7 @@ int main() {
     IODev iodevs[IO_count] = { 0 };
     for ( u32 i = 0; i < IO_count; i++ ) {
         qios[i] = (Queue *) alloc_or_exit("qios_i", queue_size);
+        Queue_init(qios[i], queue_size);
         const u32 dev_cnt = io_dev_count(i);
         iodevs[i].q = (Queue *) alloc_or_exit("idev.q_i", dev_cnt);
         Queue_init(iodevs[i].q, numpcb);
@@ -343,4 +390,6 @@ int main() {
         assert( Queue_is_empty(qs[i]) );
         free(qs[i]);
     }
+
+    unread_input();
 }
