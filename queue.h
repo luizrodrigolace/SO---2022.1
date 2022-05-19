@@ -1,4 +1,5 @@
-// #define __QUEUE_IMPL__
+#ifndef QUEUE_LIB
+#define QUEUE_LIB
 
 #include <stdio.h>
 #include "types.h"
@@ -29,7 +30,11 @@ Queue_Ret Queue_dequeue(Queue *);
 Queue_Ret Queue_peek(const Queue *);
 void Queue_debug(const Queue *, FILE *);
 
+#endif // QUEUE_LIB
+
 #ifdef __QUEUE_IMPL__
+#ifndef QUEUE_IMPLEMENTATION
+#define QUEUE_IMPLEMENTATION
 
 size_t Queue_sizeof(u32 len) {
     return sizeof(Queue) + sizeof(((Queue *)0)->data[0])*(len+1);
@@ -137,4 +142,6 @@ void Queue_debug(const Queue *q, FILE* f) {
     fprintf(f, "\n    }\n");
     fprintf(f, "}\n");
 }
+
+#endif // QUEUE_IMPLEMENTATION
 #endif // QUEUE_IMPL
