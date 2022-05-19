@@ -1,10 +1,11 @@
 #include "types.h"
+#include "queue.h"
 
 #define MAX_PID         65536   // 2^16 (unsigned short)
 typedef u16 PID;
 
 #define TIME_SLICE      4
-
+typedef u16 time;
 
 #define DISK_TIME       3
 #define TAPE_TIME       10
@@ -14,13 +15,21 @@ typedef u16 PID;
 #define TAPE_NUM        2
 #define PRINTER_NUM     3
 
+typedef struct _IO_Ctx {
+    PID pid;
+    time finish_IO;
+} IO_Ctx;
+
+typedef struct _IODev {
+    Queue *q;
+    u16 next_idx;
+    IO_Ctx ctx[];
+} IODev;
+
 typedef enum _IO_t {
     IO_Disk = 0, IO_Tape, IO_Printer
     , IO_count
 } IO_t;
-
-typedef struct _IODev {
-} IODev;
 
 u32 priority_from_io(IO_t io) {
     u32 ret = 0;
@@ -41,10 +50,47 @@ u32 priority_from_io(IO_t io) {
     return ret;
 }
 
+u32 io_dev_count(IO_t io) {
+    u32 ret = 0;
+    switch (io) {
+        case IO_Disk:
+            ret = DISK_NUM;
+            break;
+        case IO_Tape:
+            ret = TAPE_NUM;
+            break;
+        case IO_Printer:
+            ret = PRINTER_NUM;
+            break;
+        case IO_count:
+            assert( 0 && "unreacheable" );
+            break;
+    }
+    return ret;
+}
+
+u32 io_time(IO_t io) {
+    u32 ret = 0;
+    switch (io) {
+        case IO_Disk:
+            ret = DISK_TIME;
+            break;
+        case IO_Tape:
+            ret = TAPE_TIME;
+            break;
+        case IO_Printer:
+            ret = PRINTER_TIME;
+            break;
+        case IO_count:
+            assert( 0 && "unreacheable" );
+            break;
+    }
+    return ret;
+}
+
 // Gerência de Processos:
 // * Novo processo tem o PID do mais recente criado +1
 // * PCB
-typedef u16 time;
 typedef enum _PCB_Status {
     p_done = 0, p_running, p_ready, p_blocked
 } PCB_Status;
@@ -55,6 +101,7 @@ typedef struct _PCB {
     time start_time;
     time end_time;
     time running_time;
+    // TODO: contar tempo bloqueado
     u8 priority;
 } PCB;
 

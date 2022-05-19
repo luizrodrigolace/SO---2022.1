@@ -125,13 +125,58 @@ void handle_blocked_processes(const time curr_time,
         Queue *qs, const u32 numq,
         Queue *qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb) {
-    (void) curr_time;
-    (void) qs; (void) numq;
-    (void) qios; (void) iodevs;
-    (void) pcbs; (void) numpcb;
+    for ( u32 i = 0; i < IO_count; i++ ) {
+        while ( 1 ) {
+            const Queue_Ret qret =
+                Queue_peek(iodevs[i].q);
+            if( qret.err == Queue_Ok ) {
+                const u32 idx = qret.data;
+                const IO_Ctx ctx = iodevs[i].ctx[idx];
+                const PID pid = ctx.pid;
+                assert( pid < numpcb );
+                assert( ctx.finish_IO <= curr_time );
+                if ( ctx.finish_IO == curr_time ) {
+                    const Queue_Ret qret_clone =
+                        Queue_dequeue(iodevs[i].q);
+                    assert( qret.err == qret_clone.err );
+                    assert( qret.data == qret_clone.data );
+                    pcbs[pid].status = p_ready;
+                    const u32 queue_idx = priority_from_io(i);
+                    assert( queue_idx <= numq );
+                    const Queue_Err qerr =
+                        Queue_enqueue(qs + queue_idx, pid );
+                    assert( qerr == Queue_Ok );
+                } else {
+                    break;
+                }
+            } else {
+                assert( qret.err == Queue_Empty );
+                break;
+            }
+        }
+    }
 
-    // TODO: dar enqueue nos processos que chegaram (IO)
-    // TODO: not implemented
+    for ( u32 i = 0; i < IO_count; i++ ) {
+        const u32 dev_cnt = io_dev_count(i);
+        const u32 time_to_finish = io_time(i);
+        while ( Queue_size(iodevs[i].q) < dev_cnt ) {
+            const Queue_Ret qret =
+                Queue_dequeue(qios + i);
+            if( qret.err == Queue_Ok ) {
+                assert( qret.data < numpcb );
+                IO_Ctx *dev_ctx = iodevs[i].ctx + iodevs[i].next_idx;
+                dev_ctx->pid = qret.data;
+                dev_ctx->finish_IO = time_to_finish;
+                const Queue_Err qerr =
+                    Queue_enqueue(iodevs[i].q, iodevs[i].next_idx);
+                assert( qerr == Queue_Ok );
+                iodevs[i].next_idx = iodevs[i].next_idx + 1 % dev_cnt;
+            } else {
+                assert( qret.err == Queue_Empty );
+                break;
+            }
+        }
+    }
 }
 
 void robinfeedback(Queue *qs, const u32 numq,
