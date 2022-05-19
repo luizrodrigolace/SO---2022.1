@@ -1,8 +1,8 @@
 #include "types.h"
 #include "queue.h"
 
-#define MAX_PID         65536   // 2^16 (unsigned short)
-typedef u16 PID;
+#define MAX_PID         255     // 2^8 - 1 (unsigned char)
+typedef u8 PID;
 
 #define TIME_SLICE      4
 typedef u16 time;
