@@ -131,6 +131,7 @@ void handle_blocked_processes(const time curr_time,
                 Queue_peek(iodevs[i].q);
             if( qret.err == Queue_Ok ) {
                 const u32 idx = qret.data;
+                assert( idx < io_dev_count(i) );
                 const IO_Ctx ctx = iodevs[i].ctx[idx];
                 const PID pid = ctx.pid;
                 assert( pid < numpcb );
@@ -164,9 +165,11 @@ void handle_blocked_processes(const time curr_time,
                 Queue_dequeue(qios + i);
             if( qret.err == Queue_Ok ) {
                 assert( qret.data < numpcb );
-                IO_Ctx *dev_ctx = iodevs[i].ctx + iodevs[i].next_idx;
-                dev_ctx->pid = qret.data;
-                dev_ctx->finish_IO = time_to_finish;
+                const IO_Ctx dev_ctx = {
+                    .pid = qret.data,
+                    .finish_IO = time_to_finish,
+                };
+                iodevs[i].ctx[iodevs[i].next_idx] = dev_ctx;
                 const Queue_Err qerr =
                     Queue_enqueue(iodevs[i].q, iodevs[i].next_idx);
                 assert( qerr == Queue_Ok );

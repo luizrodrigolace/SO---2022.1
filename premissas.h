@@ -22,8 +22,8 @@ typedef struct _IO_Ctx {
 
 typedef struct _IODev {
     Queue *q;
+    IO_Ctx *ctx;
     u16 next_idx;
-    IO_Ctx ctx[];
 } IODev;
 
 typedef enum _IO_t {
