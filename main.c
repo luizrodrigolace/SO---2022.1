@@ -238,6 +238,9 @@ void robinfeedback(Queue **qs, const u32 numq,
                             Queue_enqueue(qios[io], pid);
                         assert( qerr == Queue_Ok );
                     } break;
+                    default:
+                        assert( 0 && "unreachable" );
+                        break;
                 }
 
                 handle_new_processes(curr_time + slice,
@@ -265,6 +268,9 @@ void robinfeedback(Queue **qs, const u32 numq,
                     break;
                 case p_blocked:
                     // Nothing to do
+                    break;
+                default:
+                    assert( 0 && "unreachable" );
                     break;
             }
 

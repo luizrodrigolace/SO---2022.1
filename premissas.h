@@ -43,7 +43,8 @@ u32 priority_from_io(IO_t io) {
         case IO_Printer:
             ret = 0;
             break;
-        case IO_count:
+        case IO_count: // fallthrough
+        default:
             assert( 0 && "unreacheable" );
             break;
     }
@@ -62,7 +63,8 @@ u32 io_dev_count(IO_t io) {
         case IO_Printer:
             ret = PRINTER_NUM;
             break;
-        case IO_count:
+        case IO_count: // fallthrough
+        default:
             assert( 0 && "unreacheable" );
             break;
     }
@@ -81,7 +83,8 @@ u32 io_time(IO_t io) {
         case IO_Printer:
             ret = PRINTER_TIME;
             break;
-        case IO_count:
+        case IO_count: // fallthrough
+        default:
             assert( 0 && "unreacheable" );
             break;
     }
