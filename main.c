@@ -99,7 +99,7 @@ b32 new_process(const time t, PID *pid) {
 
 static inline
 void handle_new_processes(const time curr_time,
-        Queue *qs, const u32 numq,
+        Queue **qs, const u32 numq,
         PCB *pcbs, const u32 numpcb) {
     assert( numq > 0 );
     PID new_pid;
@@ -115,15 +115,15 @@ void handle_new_processes(const time curr_time,
         };
         pcbs[new_pid] = new_pcb;
         const Queue_Err qerr =
-            Queue_enqueue(qs + 0, new_pid);
+            Queue_enqueue(qs[0], new_pid);
         assert( qerr == Queue_Ok );
     }
 }
 
 static inline
 void handle_blocked_processes(const time curr_time,
-        Queue *qs, const u32 numq,
-        Queue *qios, IODev *iodevs,
+        Queue **qs, const u32 numq,
+        Queue **qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb) {
     for ( u32 i = 0; i < IO_count; i++ ) {
         while ( 1 ) {
@@ -145,7 +145,7 @@ void handle_blocked_processes(const time curr_time,
                     const u32 queue_idx = priority_from_io(i);
                     assert( queue_idx <= numq );
                     const Queue_Err qerr =
-                        Queue_enqueue(qs + queue_idx, pid );
+                        Queue_enqueue(qs[queue_idx], pid );
                     assert( qerr == Queue_Ok );
                 } else {
                     break;
@@ -162,7 +162,7 @@ void handle_blocked_processes(const time curr_time,
         const u32 time_to_finish = io_time(i);
         while ( Queue_size(iodevs[i].q) < dev_cnt ) {
             const Queue_Ret qret =
-                Queue_dequeue(qios + i);
+                Queue_dequeue(qios[i]);
             if( qret.err == Queue_Ok ) {
                 assert( qret.data < numpcb );
                 const IO_Ctx dev_ctx = {
@@ -182,9 +182,10 @@ void handle_blocked_processes(const time curr_time,
     }
 }
 
-void robinfeedback(Queue *qs, const u32 numq,
-        Queue *qios, IODev *iodevs,
+void robinfeedback(Queue **qs, const u32 numq,
+        Queue **qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb) {
+    return;
     assert( numq == 2 );
     assert( numpcb <= MAX_PID );
 
@@ -200,13 +201,13 @@ void robinfeedback(Queue *qs, const u32 numq,
 
         u32 first_not_empty = 0;
         for ( ; first_not_empty < numq; first_not_empty++ ) {
-            if ( !Queue_is_empty(qs + first_not_empty) )
+            if ( !Queue_is_empty(qs[first_not_empty]) )
                 break;
         }
         if ( first_not_empty < numq ) {
             // Temos alguém para rodar
             const Queue_Ret qret =
-                Queue_dequeue(qs + first_not_empty);
+                Queue_dequeue(qs[first_not_empty]);
             assert( qret.err == Queue_Ok );
             PID pid = qret.data;
             assert( pid < numpcb );
@@ -234,7 +235,7 @@ void robinfeedback(Queue *qs, const u32 numq,
                         assert( io < IO_count );
                         pcbs[pid].priority = priority_from_io(io);
                         const Queue_Err qerr =
-                            Queue_enqueue(qios + io, pid);
+                            Queue_enqueue(qios[io], pid);
                         assert( qerr == Queue_Ok );
                     } break;
                 }
@@ -256,7 +257,7 @@ void robinfeedback(Queue *qs, const u32 numq,
                     pcbs[pid].status = p_ready;
                     pcbs[pid].priority = numq - 1;
                     const Queue_Err qerr =
-                        Queue_enqueue(qs + numq - 1, pid);
+                        Queue_enqueue(qs[numq - 1], pid);
                     assert( qerr == Queue_Ok );
                     break;
                 case p_ready:
@@ -278,6 +279,62 @@ void robinfeedback(Queue *qs, const u32 numq,
     }
 }
 
+void read_input(u32 *numpcb, u32 *numios) {
+    (void) numpcb;
+    (void) numios;
+    printf("reading input... (but not!)\n");
+}
+
+void* alloc_or_exit(const char *prefix, const size_t size) {
+    void *ptr = malloc(size);
+    if ( !ptr ) {
+        fprintf(stderr, "%s: Sem memória para alocar (%lu bytes)",
+                prefix, size);
+        exit(1);
+    }
+    return ptr;
+}
+
 int main() {
+
+    u32 numpcb, numios;
+    read_input(&numpcb, &numios);
+
+    const u32 numq = 2;
+    const u32 queue_size = Queue_sizeof(numpcb);
+
+    Queue *qs[2];
+    for ( u32 i = 0; i < numq; i++ ) {
+        qs[i] = (Queue *) alloc_or_exit("qs_i", queue_size);
+        Queue_init(qs[i], numpcb);
+    }
+
+    Queue *qios[IO_count];
+    IODev iodevs[IO_count] = { 0 };
+    for ( u32 i = 0; i < IO_count; i++ ) {
+        qios[i] = (Queue *) alloc_or_exit("qios_i", queue_size);
+        const u32 dev_cnt = io_dev_count(i);
+        iodevs[i].q = (Queue *) alloc_or_exit("idev.q_i", dev_cnt);
+        Queue_init(iodevs[i].q, numpcb);
+        iodevs[i].ctx = (IO_Ctx *) alloc_or_exit("idev.ctx_i", dev_cnt);
+    }
+    PCB *pcbs = (PCB *) alloc_or_exit("pcbs", sizeof(*pcbs)*numpcb);
+
+    robinfeedback(qs, numq, qios, iodevs, pcbs, numpcb);
+
     printf("main!\n");
+
+    free(pcbs);
+    for ( u32 i = 0; i < IO_count; i++ ) {
+        assert( Queue_is_empty(iodevs[i].q) );
+        free(iodevs[i].q);
+        free(iodevs[i].ctx);
+        assert( Queue_is_empty(qios[i]) );
+        free(qios[i]);
+    }
+
+    for ( u32 i = 0; i < numq; i++ ) {
+        assert( Queue_is_empty(qs[i]) );
+        free(qs[i]);
+    }
 }
