@@ -186,6 +186,9 @@ void handle_blocked_processes(const time curr_time,
                     assert( qret.err == qret_clone.err );
                     assert( qret.data == qret_clone.data );
                     pcbs[pid].status = p_ready;
+                    pcbs[pid].io_time +=
+                        curr_time - pcbs[pid].io_start;
+                    pcbs[pid].io_start = 0;
                     const u32 queue_idx = priority_from_io(i);
                     assert( queue_idx <= numq );
                     const Queue_Err qerr =
@@ -314,7 +317,9 @@ void robinfeedback(Queue **qs, const u32 numq,
                     } break;
                     case Roda_IO: {
                         // Ficou com estado bloqueado
+                        assert( pcbs[pid].io_start == 0 );
                         pcbs[pid].status = p_blocked;
+                        pcbs[pid].io_start = curr_time + slice;
                         log_leave_cpu(log, curr_time + slice, pid);
                         const IO_t io = roda_ret.io_type;
                         assert( io < IO_count );
@@ -466,6 +471,7 @@ void print_stats(FILE *f, const PCB *pcbs, const u32 numpcbs) {
         fprintf(f, "    start_time   : %hu\n", info.start_time);
         fprintf(f, "    end_time     : %hu\n", info.end_time);
         fprintf(f, "    running_time : %hu\n", info.running_time);
+        fprintf(f, "    io_time      : %hu\n", info.io_time);
         fprintf(f, "    turn_around  : %hu\n", turn_around);
         fprintf(f, "    ratio(tq/ts) : %lf\n", ratio);
     }

@@ -135,11 +135,12 @@ typedef enum _PCB_Status {
 // Process Control Block (Só o Contexto de Software)
 typedef struct _PCB {
     PCB_Status status;
-    PID pid;
     time start_time;
     time end_time;
     time running_time;
-    // TODO: contar tempo bloqueado
+    time io_time;
+    time io_start;
+    PID pid;
     u8 priority;
 } PCB;
 
