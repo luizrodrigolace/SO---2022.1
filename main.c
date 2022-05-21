@@ -143,7 +143,9 @@ b32 espera(const time t, const PCB *pcbs, const u32 numpcb) {
  * retorna false (0) se não chegou um novo processo.
  * retorna no pid o pid do processo que acabou de chegar */
 b32 new_process(const time t, PID *pid) {
+
     static PID last_pid_not_started = 0;
+
     if ( last_pid_not_started < cheat_table->len ) {
         const time next_start =
             cheat_table->lines[last_pid_not_started].start;
@@ -155,16 +157,24 @@ b32 new_process(const time t, PID *pid) {
             assert( t < next_start );
             return 0;
         }
+
     } else {
         return 0;
     }
 }
 
+/* Verifica se há processos novos a serem tratados e os coloca na fila, caso existam.
+   Recebe: curr_time: tempo atual;
+    * qs: um vetor de filas do cpu;
+    * numq: quantidade de filas do cpu;
+    * pcbs: vetor de contextos de software;
+    * numpcb: quantidade de contextos de software.
+*/
 static inline
 void handle_new_processes(const time curr_time,
         Queue **qs, const u32 numq,
         PCB *pcbs, const u32 numpcb) {
-    assert( numq > 0 );
+
     PID new_pid;
     while ( new_process(curr_time, &new_pid) ) {
         assert( new_pid < numpcb );
@@ -183,23 +193,43 @@ void handle_new_processes(const time curr_time,
     }
 }
 
+/* Verifica se há processos bloqueados, que acabaram de fazer I/O, e os coloca na fila, caso existam.
+   Recebe: curr_time: tempo atual;
+    * qs: um vetor de filas do cpu;
+    * numq: quantidade de filas do cpu;
+    * qios: vetor de filas de i/o (tamanho IO_count);
+    * iodevs: vetor de dispositivos (tamanho IO_count);
+    * pcbs: vetor de contextos de software;
+    * numpcb: quantidade de contextos de software.  
+TIRANDO DA "FILA DA IMPRESSORA QUE EXECUTA" E COLOCANDO NA FILA DA CPU             
+*/
 static inline
 void handle_blocked_processes(const time curr_time,
         Queue **qs, const u32 numq,
         Queue **qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb) {
+
+    // loop para cada tipo de i/o
     for ( u32 i = 0; i < IO_count; i++ ) {
         while ( 1 ) {
+            
+            // Coletando informações sobre o primeiro dispositivo de I/O que está executando a mais tempo
             const Queue_Ret qret =
                 Queue_peek(iodevs[i].q);
+
+            // Se existe algum dispositivo I/O ativo
             if( qret.err == Queue_Ok ) {
                 const u32 idx = qret.data;
                 assert( idx < io_dev_count(i) );
+                // Coletando o contexto do dispotitivo selecionado que está executando a mais tempo
                 const IO_Ctx ctx = iodevs[i].ctx[idx];
                 const PID pid = ctx.pid;
                 assert( pid < numpcb );
                 assert( curr_time <= ctx.finish_IO );
+
+                // Se o dispositivo que está executando a mais tempo já parou de executar
                 if ( ctx.finish_IO == curr_time ) {
+                    // Tirando o dispositivo que está rodando a mais tempo
                     const Queue_Ret qret_clone =
                         Queue_dequeue(iodevs[i].q);
                     assert( qret.err == qret_clone.err );
@@ -210,6 +240,7 @@ void handle_blocked_processes(const time curr_time,
                     const Queue_Err qerr =
                         Queue_enqueue(qs[queue_idx], pid );
                     assert( qerr == Queue_Ok );
+
                 } else {
                     break;
                 }
@@ -220,22 +251,30 @@ void handle_blocked_processes(const time curr_time,
         }
     }
 
+    // Tirando da fila de espera do I/O e mandando executar ("COLOCANDO NA FILA DO DISPOSITIVO EXECUTANDO")
     for ( u32 i = 0; i < IO_count; i++ ) {
         const u32 dev_cnt = io_dev_count(i);
-        const u32 time_to_finish = io_time(i);
+        // Tempo de duração do I/O
+        const time finish_time = curr_time + io_time(i);
+        // Verificando se existe dispositivos disponiveis
         while ( Queue_size(iodevs[i].q) < dev_cnt ) {
+            // Fila de I/O
             const Queue_Ret qret =
                 Queue_dequeue(qios[i]);
+            // Tirando algum processo da fila de I/O
             if( qret.err == Queue_Ok ) {
                 assert( qret.data < numpcb );
                 const IO_Ctx dev_ctx = {
                     .pid = qret.data,
-                    .finish_IO = time_to_finish,
+                    .finish_IO = finish_time,
                 };
+                // Selecionando um dispositivo e alterando seu contexto
                 iodevs[i].ctx[iodevs[i].next_idx] = dev_ctx;
+                // Colocando este dispositivo na fila de impressoras ("AQUI ESTAMOS SOMENTE REGISTRANDO QUE ELA ESTÁ ATIVA MAS ELA FICOU ATIVA QUANDO MUDAMOS SEU CTX")
                 const Queue_Err qerr =
                     Queue_enqueue(iodevs[i].q, iodevs[i].next_idx);
                 assert( qerr == Queue_Ok );
+                // Selecionando a próxima impressora livre
                 iodevs[i].next_idx = iodevs[i].next_idx + 1 % dev_cnt;
             } else {
                 assert( qret.err == Queue_Empty );
@@ -245,18 +284,30 @@ void handle_blocked_processes(const time curr_time,
     }
 }
 
+/* Recebe:
+ * qs: um vetor de filas do cpu;
+ * numq: quantidade de filas do cpu;
+ * qios: vetor de filas de i/o (tamanho IO_count);
+ * iodevs: vetor de dispositivos (tamanho IO_count);
+ * pcbs: vetor de contextos de software;
+ * numpcb: quantidade de contextos de software.
+ */  
 void robinfeedback(Queue **qs, const u32 numq,
         Queue **qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb,
         const Log_Ctx log) {
     (void) log;
+    // fazendo verificação quant de filas de cpu e contextos de software
     assert( numq == 2 );
     assert( numpcb <= MAX_PID );
 
     time curr_time = 0;
-    b32 is_done = 1;
-    while ( is_done ) {
+    b32 is_not_done = 1;
 
+    // loop até finalizar todos os processos.
+    while ( is_not_done ) {
+
+        // Verificando se há processos novos 
         handle_new_processes(curr_time,
                 qs, numq, pcbs, numpcb);
 
@@ -264,6 +315,8 @@ void robinfeedback(Queue **qs, const u32 numq,
                 qs, numq, qios, iodevs, pcbs, numpcb);
 
         u32 first_not_empty = 0;
+
+        // Se a fila da CPU não estiver vazia, vamos selecionar um processo para executar
         for ( ; first_not_empty < numq; first_not_empty++ ) {
             if ( !Queue_is_empty(qs[first_not_empty]) )
                 break;
@@ -277,15 +330,16 @@ void robinfeedback(Queue **qs, const u32 numq,
             assert( pid < numpcb );
             assert( pcbs[pid].priority == first_not_empty );
             pcbs[pid].status = p_running;
-
+            // Pegando o tempo que ele já rodou
             time running = pcbs[pid].running_time;
             time slice;
+            // O processo vai rodar até o seu time slice acabar
             for ( slice = 0; slice < TIME_SLICE; slice++ ) {
                 if ( pcbs[pid].status != p_running )
                     break;
-
+                // Verificando se o processo vai realizar algum I/O no tempo atual
                 const Roda_Ret roda_ret = roda(pid, running + slice);
-
+               // Analisando o que aconteceu com o preocesso após ter executado uma unidade de tempo
                 switch ( roda_ret.status ) {
                     case Roda_Done: {
                         pcbs[pid].status = p_done;
@@ -294,10 +348,13 @@ void robinfeedback(Queue **qs, const u32 numq,
                         // Nothing to do
                     } break;
                     case Roda_IO: {
+                        // Ficou com estado bloqueado
                         pcbs[pid].status = p_blocked;
                         const IO_t io = roda_ret.io_type;
                         assert( io < IO_count );
+                        // Prioridade do retorno do I/O
                         pcbs[pid].priority = priority_from_io(io);
+                        // Colocando o processo na fila de espera do I/O
                         const Queue_Err qerr =
                             Queue_enqueue(qios[io], pid);
                         assert( qerr == Queue_Ok );
@@ -306,23 +363,27 @@ void robinfeedback(Queue **qs, const u32 numq,
                         assert( 0 && "unreachable" );
                         break;
                 }
-
+                // Analisando se algum processo foi criado
                 handle_new_processes(curr_time + slice,
                         qs, numq, pcbs, numpcb);
-
+               
+                // Analisando se algum processo que estava fazendo I/O terminou
                 handle_blocked_processes(curr_time + slice,
                         qs, numq, qios, iodevs, pcbs, numpcb);
             }
-
+            // Somando uma unidade de tempo no tempo total de execução do processo
             pcbs[pid].running_time += slice;
 
+            // Lendo o status do processo
             switch ( pcbs[pid].status ) {
                 case p_done:
                     pcbs[pid].end_time = curr_time + slice;
                     break;
                 case p_running:
                     pcbs[pid].status = p_ready;
+                    // Processo que sofreu preempção retornando na fila de baixa prioridade  
                     pcbs[pid].priority = numq - 1;
+                    // Colocando o processo não finalizado na fila
                     const Queue_Err qerr =
                         Queue_enqueue(qs[numq - 1], pid);
                     assert( qerr == Queue_Ok );
@@ -337,18 +398,19 @@ void robinfeedback(Queue **qs, const u32 numq,
                     assert( 0 && "unreachable" );
                     break;
             }
-
+            // Aumentando o tempo
             curr_time += slice;
         } else {
             // Não temos ninguém para rodar
 
-            is_done = espera(curr_time, pcbs, numpcb);
+            is_not_done = espera(curr_time, pcbs, numpcb);
 
             curr_time += 1;
         }
     }
 }
 
+// Alocando memoria
 void* alloc_or_exit(const char *prefix, const size_t size) {
     void *ptr = malloc(size);
     if ( !ptr ) {
@@ -421,10 +483,11 @@ int main() {
     u32 numpcb, numios;
     read_input(&numpcb, &numios);
 
+    // Alocando memoria
     const u32 numq = 2;
     const u32 queue_size = Queue_sizeof(numpcb);
 
-    Queue *qs[2];
+    Queue *qs[2];  
     for ( u32 i = 0; i < numq; i++ ) {
         qs[i] = (Queue *) alloc_or_exit("qs_i", queue_size);
         Queue_init(qs[i], numpcb);
@@ -442,10 +505,12 @@ int main() {
     }
     PCB *pcbs = (PCB *) alloc_or_exit("pcbs", sizeof(*pcbs)*numpcb);
 
+    //Chamando a função que vai realizar o Robin com Feedback
     robinfeedback(qs, numq, qios, iodevs, pcbs, numpcb, logctx);
 
     printf("main!\n");
 
+    //Liberando memoria
     free(pcbs);
     for ( u32 i = 0; i < IO_count; i++ ) {
         assert( Queue_is_empty(iodevs[i].q) );
