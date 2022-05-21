@@ -91,6 +91,26 @@ u32 io_time(IO_t io) {
     return ret;
 }
 
+const char* io_name(IO_t io) {
+    char *ret = 0;
+    switch (io) {
+        case IO_Disk:
+            ret = "Disco";
+            break;
+        case IO_Tape:
+            ret = "Fita";
+            break;
+        case IO_Printer:
+            ret = "Impressora";
+            break;
+        case IO_count: // fallthrough
+        default:
+            assert( 0 && "unreacheable" );
+            break;
+    }
+    return ret;
+}
+
 // Gerência de Processos:
 // * Novo processo tem o PID do mais recente criado +1
 // * PCB

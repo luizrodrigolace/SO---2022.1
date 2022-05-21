@@ -7,6 +7,69 @@
 #define __QUEUE_IMPL__
 #include "queue.h"
 
+// Logging
+
+typedef enum _Event_t {
+    e_new_pid = 0, e_enter_cpu, e_leave_cpu,
+    e_ask_IO, e_from_IO, e_done
+    , e_count
+} Event_t;
+
+typedef struct _Event {
+    time t;
+    PID pid;
+    Event_t event;
+    IO_t io;
+} Event;
+
+typedef enum _Log_t {
+    log_sout = 0x01, log_vgraph = 0x02, log_hgraph = 0x04,
+    log_unknown_8 = 0x08,
+    log_unknown_16 = 0x10, log_unknown_32 = 0x20,
+    log_unknown_64 = 0x40, log_unknown_128 = 0x80
+} Log_t;
+
+typedef struct _Log_Ctx {
+    Log_t type;
+} Log_Ctx;
+
+void log_event(const Log_Ctx log, Event event) {
+    assert( log.type == log_sout );
+    switch ( event.event ) {
+        case e_new_pid:
+            assert( event.io == IO_count );
+            printf("[%hu] Novo processo %hhu\n",
+                    event.t, event.pid);
+            break;
+        case e_enter_cpu:
+            assert( event.io == IO_count );
+            printf("[%hu] Processo %hhu entrou na cpu\n",
+                    event.t, event.pid);
+            break;
+        case e_leave_cpu:
+            assert( event.io == IO_count );
+            printf("[%hu] Processo %hhu saiu da cpu\n",
+                    event.t, event.pid);
+            break;
+        case e_ask_IO:
+            printf("[%hu] Processo %hhu pediu IO (%s)\n",
+                    event.t, event.pid, io_name(event.io));
+            break;
+        case e_from_IO:
+            printf("[%hu] Processo %hhu voltou do IO\n",
+                    event.t, event.pid);
+            break;
+        case e_done:
+            assert( event.io == IO_count );
+            printf("[%hu] Processo %hhu terminou\n",
+                    event.t, event.pid);
+            break;
+        case e_count:
+        default:
+            break;
+    }
+}
+
 // Tabelas de entrada
 static CTable *cheat_table;
 static CIO *cheat_io_table;
@@ -184,7 +247,9 @@ void handle_blocked_processes(const time curr_time,
 
 void robinfeedback(Queue **qs, const u32 numq,
         Queue **qios, IODev *iodevs,
-        PCB *pcbs, const u32 numpcb) {
+        PCB *pcbs, const u32 numpcb,
+        const Log_Ctx log) {
+    (void) log;
     assert( numq == 2 );
     assert( numpcb <= MAX_PID );
 
@@ -349,6 +414,10 @@ void unread_input() {
 
 int main() {
 
+    Log_Ctx logctx = {
+        .type = log_sout,
+    };
+
     u32 numpcb, numios;
     read_input(&numpcb, &numios);
 
@@ -373,7 +442,7 @@ int main() {
     }
     PCB *pcbs = (PCB *) alloc_or_exit("pcbs", sizeof(*pcbs)*numpcb);
 
-    robinfeedback(qs, numq, qios, iodevs, pcbs, numpcb);
+    robinfeedback(qs, numq, qios, iodevs, pcbs, numpcb, logctx);
 
     printf("main!\n");
 
