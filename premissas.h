@@ -27,7 +27,7 @@ typedef struct _IO_Ctx {
 
 // Dispositivo de I/O
 // Cada I/O terá uma fila e um número de contextos
-// Simulando os N dispositivos de I/O 
+// Simulando os N dispositivos de I/O
 typedef struct _IODev {
     Queue *q;
     IO_Ctx *ctx;
