@@ -7,68 +7,7 @@
 #define __QUEUE_IMPL__
 #include "queue.h"
 
-// Logging
-
-typedef enum _Event_t {
-    e_new_pid = 0, e_enter_cpu, e_leave_cpu,
-    e_ask_IO, e_from_IO, e_done
-    , e_count
-} Event_t;
-
-typedef struct _Event {
-    time t;
-    PID pid;
-    Event_t event;
-    IO_t io;
-} Event;
-
-typedef enum _Log_t {
-    log_sout = 0x01, log_vgraph = 0x02, log_hgraph = 0x04,
-    log_unknown_8 = 0x08,
-    log_unknown_16 = 0x10, log_unknown_32 = 0x20,
-    log_unknown_64 = 0x40, log_unknown_128 = 0x80
-} Log_t;
-
-typedef struct _Log_Ctx {
-    Log_t type;
-} Log_Ctx;
-
-void log_event(const Log_Ctx log, Event event) {
-    assert( log.type == log_sout );
-    switch ( event.event ) {
-        case e_new_pid:
-            assert( event.io == IO_count );
-            printf("[%hu] Novo processo %hhu\n",
-                    event.t, event.pid);
-            break;
-        case e_enter_cpu:
-            assert( event.io == IO_count );
-            printf("[%hu] Processo %hhu entrou na cpu\n",
-                    event.t, event.pid);
-            break;
-        case e_leave_cpu:
-            assert( event.io == IO_count );
-            printf("[%hu] Processo %hhu saiu da cpu\n",
-                    event.t, event.pid);
-            break;
-        case e_ask_IO:
-            printf("[%hu] Processo %hhu pediu IO (%s)\n",
-                    event.t, event.pid, io_name(event.io));
-            break;
-        case e_from_IO:
-            printf("[%hu] Processo %hhu voltou do IO\n",
-                    event.t, event.pid);
-            break;
-        case e_done:
-            assert( event.io == IO_count );
-            printf("[%hu] Processo %hhu terminou\n",
-                    event.t, event.pid);
-            break;
-        case e_count:
-        default:
-            break;
-    }
-}
+#include "log.c"
 
 // Tabelas de entrada
 static CTable *cheat_table;
@@ -175,7 +114,8 @@ b32 new_process(const time t, PID *pid) {
 static inline
 void handle_new_processes(const time curr_time,
         Queue **qs, const u32 numq,
-        PCB *pcbs, const u32 numpcb) {
+        PCB *pcbs, const u32 numpcb,
+        const Log_Ctx log) {
 
     assert( numq > 0 );
     PID new_pid;
@@ -193,6 +133,7 @@ void handle_new_processes(const time curr_time,
         const Queue_Err qerr =
             Queue_enqueue(qs[0], new_pid);
         assert( qerr == Queue_Ok );
+        log_new_pid(log, curr_time, new_pid);
     }
 }
 
@@ -212,7 +153,8 @@ static inline
 void handle_blocked_processes(const time curr_time,
         Queue **qs, const u32 numq,
         Queue **qios, IODev *iodevs,
-        PCB *pcbs, const u32 numpcb) {
+        PCB *pcbs, const u32 numpcb,
+        const Log_Ctx log) {
 
     // loop para cada tipo de i/o
     for ( u32 i = 0; i < IO_count; i++ ) {
@@ -249,6 +191,7 @@ void handle_blocked_processes(const time curr_time,
                     const Queue_Err qerr =
                         Queue_enqueue(qs[queue_idx], pid );
                     assert( qerr == Queue_Ok );
+                    log_from_IO(log, curr_time, pid, i);
 
                 } else {
                     break;
@@ -288,6 +231,7 @@ void handle_blocked_processes(const time curr_time,
                 const Queue_Err qerr =
                     Queue_enqueue(iodevs[i].q, iodevs[i].next_idx);
                 assert( qerr == Queue_Ok );
+                log_start_IO(log, curr_time, qret.data, i);
                 // Selecionando a próxima impressora livre
                 iodevs[i].next_idx = iodevs[i].next_idx + 1 % dev_cnt;
             } else {
@@ -311,7 +255,6 @@ void robinfeedback(Queue **qs, const u32 numq,
         Queue **qios, IODev *iodevs,
         PCB *pcbs, const u32 numpcb,
         const Log_Ctx log) {
-    (void) log;
     // fazendo verificação quant de filas de cpu e
     // contextos de software
     assert( numq == 2 );
@@ -325,10 +268,10 @@ void robinfeedback(Queue **qs, const u32 numq,
 
         // Verificando se há processos novos
         handle_new_processes(curr_time,
-                qs, numq, pcbs, numpcb);
+                qs, numq, pcbs, numpcb, log);
 
         handle_blocked_processes(curr_time,
-                qs, numq, qios, iodevs, pcbs, numpcb);
+                qs, numq, qios, iodevs, pcbs, numpcb, log);
 
         u32 first_not_empty = 0;
 
@@ -347,6 +290,7 @@ void robinfeedback(Queue **qs, const u32 numq,
             assert( pid < numpcb );
             assert( pcbs[pid].priority == first_not_empty );
             pcbs[pid].status = p_running;
+            log_enter_cpu(log, curr_time, pid);
             // Pegando o tempo que ele já rodou
             time running = pcbs[pid].running_time;
             time slice;
@@ -362,6 +306,8 @@ void robinfeedback(Queue **qs, const u32 numq,
                 switch ( roda_ret.status ) {
                     case Roda_Done: {
                         pcbs[pid].status = p_done;
+                        log_leave_cpu(log, curr_time + slice, pid);
+                        log_done(log, curr_time + slice, pid);
                     } break;
                     case Roda_NotDone: {
                         // Nothing to do
@@ -369,6 +315,7 @@ void robinfeedback(Queue **qs, const u32 numq,
                     case Roda_IO: {
                         // Ficou com estado bloqueado
                         pcbs[pid].status = p_blocked;
+                        log_leave_cpu(log, curr_time + slice, pid);
                         const IO_t io = roda_ret.io_type;
                         assert( io < IO_count );
                         // Prioridade do retorno do I/O
@@ -378,19 +325,21 @@ void robinfeedback(Queue **qs, const u32 numq,
                         const Queue_Err qerr =
                             Queue_enqueue(qios[io], pid);
                         assert( qerr == Queue_Ok );
+                        log_ask_IO(log, curr_time + slice, pid, io);
                     } break;
                     default:
                         assert( 0 && "unreachable" );
                         break;
                 }
+
                 // Analisando se algum processo foi criado
                 handle_new_processes(curr_time + slice,
-                        qs, numq, pcbs, numpcb);
+                        qs, numq, pcbs, numpcb, log);
 
                 // Analisando se algum processo
                 // que estava fazendo I/O terminou
                 handle_blocked_processes(curr_time + slice,
-                        qs, numq, qios, iodevs, pcbs, numpcb);
+                        qs, numq, qios, iodevs, pcbs, numpcb, log);
             }
             // Somando o tempo "rodado" no
             // tempo total de execução do processo
@@ -399,10 +348,11 @@ void robinfeedback(Queue **qs, const u32 numq,
             // Lendo o status do processo
             switch ( pcbs[pid].status ) {
                 case p_done:
-                    pcbs[pid].end_time = curr_time + slice;
+                    pcbs[pid].end_time = curr_time + slice - 1;
                     break;
                 case p_running:
                     pcbs[pid].status = p_ready;
+                    log_leave_cpu(log, curr_time + slice - 1, pid);
                     // Processo que sofreu preempção
                     // retornando na fila de baixa prioridade
                     pcbs[pid].priority = numq - 1;
@@ -462,7 +412,7 @@ void read_input(u32 *numpcb, u32 *numios) {
         .io_count = 2,
     },
     p1 = {
-        .start = 0,
+        .start = 1,
         .service = 2*TIME_SLICE - TIME_SLICE/2,
         .io_start = 2,
         .io_count = 1,
@@ -531,7 +481,7 @@ int main() {
     //Chamando a função que vai realizar o Robin com Feedback
     robinfeedback(qs, numq, qios, iodevs, pcbs, numpcb, logctx);
 
-    printf("main!\n");
+    print_log(logctx);
 
     //Liberando memoria
     free(pcbs);

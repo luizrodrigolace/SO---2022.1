@@ -6,7 +6,7 @@ all: run_exe
 run_exe: run
 	./run
 
-run: main.c queue.h premissas.h types.h
+run: main.c queue.h premissas.h types.h log.c
 	${CC} ${CFLAGS} main.c -o $@
 
 test_queue: test_queue.out
