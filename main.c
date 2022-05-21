@@ -348,6 +348,7 @@ void robinfeedback(Queue **qs, const u32 numq,
             // Lendo o status do processo
             switch ( pcbs[pid].status ) {
                 case p_done:
+                    pcbs[pid].running_time -= 1;
                     pcbs[pid].end_time = curr_time + slice - 1;
                     break;
                 case p_running:
@@ -447,6 +448,35 @@ void unread_input() {
     free(cheat_io_table);
 }
 
+void print_stats(FILE *f, const PCB *pcbs, const u32 numpcbs) {
+    fprintf(f, "=== Statisticas ===\n\n");
+    u32 total_turn_around = 0;
+    f64 total_ratio = 0;
+    for ( u32 i = 0; i < numpcbs; i++ ) {
+        PCB info = pcbs[i];
+        assert( info.status == p_done );
+        assert( info.pid == i );
+        const u32 turn_around = info.end_time - info.start_time;
+        const f64 ratio =
+            ((f64) turn_around) / ((f64) info.running_time);
+        total_turn_around += turn_around;
+        total_ratio += ratio;
+
+        fprintf(f, "Processo %hhu:\n", info.pid);
+        fprintf(f, "    start_time   : %hu\n", info.start_time);
+        fprintf(f, "    end_time     : %hu\n", info.end_time);
+        fprintf(f, "    running_time : %hu\n", info.running_time);
+        fprintf(f, "    turn_around  : %hu\n", turn_around);
+        fprintf(f, "    ratio(tq/ts) : %lf\n", ratio);
+    }
+    fprintf(f, "\nMédia:\n");
+    fprintf(f, "    turn_around  : %hu\n",
+            total_turn_around / numpcbs);
+    fprintf(f, "    ratio(tq/ts) : %lf\n",
+            total_ratio / ((f64) numpcbs));
+    fprintf(f, "\n");
+}
+
 int main() {
 
     Log_Ctx logctx = {
@@ -482,6 +512,8 @@ int main() {
     robinfeedback(qs, numq, qios, iodevs, pcbs, numpcb, logctx);
 
     print_log(logctx);
+
+    print_stats(stdout, pcbs, numpcb);
 
     //Liberando memoria
     free(pcbs);
