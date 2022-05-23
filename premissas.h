@@ -144,7 +144,7 @@ typedef struct _PCB {
     u8 priority;
 } PCB;
 
-// Tabela de Entrada
+// Tabela de Entrada para oI/O
 typedef struct _CIO {
     IO_t io_type;
     time begin;
