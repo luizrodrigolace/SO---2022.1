@@ -389,6 +389,18 @@ void robinfeedback(Queue **qs, const u32 numq,
     }
 }
 
+// Realocando memoria
+void* realloc_or_exit(const char *prefix, void *ptr,
+        const size_t size) {
+    void *new_ptr = realloc(ptr, size);
+    if ( !new_ptr ) {
+        fprintf(stderr, "%s: Sem memória para realocar (%lu bytes)",
+                prefix, size);
+        exit(1);
+    }
+    return new_ptr;
+}
+
 // Alocando memoria
 void* alloc_or_exit(const char *prefix, const size_t size) {
     void *ptr = malloc(size);
@@ -400,51 +412,199 @@ void* alloc_or_exit(const char *prefix, const size_t size) {
     return ptr;
 }
 
+void print_input(FILE *f, const PID pid, const u32 cap,
+        const u32 nios, const u32 io_cap) {
+    assert( pid <= cap );
+    assert( nios <= io_cap );
+    const CTable *ct = cheat_table;
+    const CIO *cio = cheat_io_table;
+    fprintf(f, "pid-cap = %hhu-%u, nios-io_cap = %u-%u\n",
+            pid, cap, nios, io_cap);
+    for ( u32 i = 0; i < pid; i++ ) {
+        CLine line = ct->lines[i];
+        fprintf(f, "%hhu: %hu %hu [%hu %hu]",
+                i, line.start, line.service,
+                line.io_start, line.io_count);
+        for ( u32 j = 0; j < line.io_count; j++ ) {
+            const u32 idx = line.io_start + j;
+            fprintf(f, " (%u)%hu-%c",
+                    idx,
+                    cio[idx].begin, "DTP"[cio[idx].io_type]);
+        }
+        fprintf(f, "\n");
+    }
+    fprintf(f, "\n");
+}
+
 void read_input(u32 *numpcb, u32 *numios) {
-    (void) numpcb;
-    (void) numios;
-    printf("reading input... (but not!)\n");
+    u32 cap = 4;
+    u32 io_cap = 4;
+    PID pid = 0;
+    u32 nios = 0;
 
-    // Tabela hard coded
-    const PID len = 2;
-    const u32 nios = 3;
     cheat_table = (CTable *) alloc_or_exit("cheat_table",
-            sizeof(CTable) + len*sizeof(CLine));
-    cheat_table->len = len;
-    CLine p0 = {
-        .start = 0,
-        .service = 2*TIME_SLICE + TIME_SLICE/2,
-        .io_start = 0,
-        .io_count = 2,
-    },
-    p1 = {
-        .start = 1,
-        .service = 2*TIME_SLICE - TIME_SLICE/2,
-        .io_start = 2,
-        .io_count = 1,
-    };
-    cheat_table->lines[0] = p0;
-    cheat_table->lines[1] = p1;
-
+            sizeof(CTable) + cap*sizeof(CLine));
     cheat_io_table = (CIO *) alloc_or_exit("cheat_io)table",
-            nios*sizeof(CIO));
-    CIO p0_io0 = {
-        .io_type = IO_Tape,
-        .begin = 3,
-    },
-    p0_io1 = {
-        .io_type = IO_Disk,
-        .begin = 7,
-    },
-    p1_io0 = {
-        .io_type = IO_Printer,
-        .begin = 5,
-    };
-    cheat_io_table[0] = p0_io0;
-    cheat_io_table[1] = p0_io1;
-    cheat_io_table[2] = p1_io0;
+            io_cap*sizeof(CIO));
 
-    *numpcb = len;
+    enum State {
+        begin_line = 0,
+        reading_start, start_read,
+        reading_service, service_read,
+        reading_io_begin, io_begin_read,
+        io_type_read,
+    } state = begin_line;
+    i32 c;
+    u32 acc = 0;
+    while ( (c = getchar()) != EOF ) {
+        // ignoring '\r'
+        if ( c == '\r' ) continue;
+
+        switch (state) {
+            case begin_line:
+                assert( acc == 0 );
+                if ( '0' <= c && c <= '9' ) {
+                    acc = c - '0';
+                    state = reading_start;
+                    if ( pid >= cap ) {
+                        cap *= 2;
+                        cheat_table = (CTable *) realloc_or_exit(
+                                "cheat_table",
+                                cheat_table,
+                                sizeof(CTable) + cap*sizeof(CLine));
+                    }
+                } else if ( c == ' ' || c == '\t'
+                        || c == '\n' ) {
+                    // Nothing to do
+                } else {
+                    fprintf(stderr, "[warn] read_input (%d): "
+                            "unhandled char: '%c' (%d)\n",
+                            state, c, c);
+                }
+                break;
+            case reading_start:
+            case reading_service:
+                if ( '0' <= c && c <= '9' ) {
+                    acc = 10*acc + c - '0';
+                } else if ( c == ' ' || c == '\t' ) {
+                    if ( state == reading_start ) {
+                        state = start_read;
+                        cheat_table->lines[pid].start = acc;
+                    } else if ( state == reading_service ) {
+                        state = service_read;
+                        cheat_table->lines[pid].service = acc;
+                        cheat_table->lines[pid].io_start = nios;
+                    } else {
+                        assert( 0 && "unreachable" );
+                    }
+                    acc = 0;
+                } else if ( state == reading_service && c == '\n' ) {
+                    state = begin_line;
+                    cheat_table->lines[pid].service = acc;
+                    cheat_table->lines[pid].io_start = nios;
+                    cheat_table->lines[pid].io_count = 0;
+                    acc = 0;
+                    pid += 1;
+                } else {
+                    fprintf(stderr, "[warn] read_input (%d): "
+                            "unhandled char: '%c' (%d)\n",
+                            state, c, c);
+                }
+                break;
+            case start_read:
+                if ( '0' <= c && c <= '9' ) {
+                    assert( acc == 0 );
+                    acc = c - '0';
+                    state = reading_service;
+                } else if ( c == ' ' || c == '\t' ) {
+                    // Nothing to do
+                } else {
+                    fprintf(stderr, "[warn] read_input (%d): "
+                            "unhandled char: '%c' (%d)\n",
+                            state, c, c);
+                }
+                break;
+            case service_read:
+                if ( '0' <= c && c <= '9' ) {
+                    assert( acc == 0 );
+                    acc = c - '0';
+                    state = reading_io_begin;
+                    if ( nios >= io_cap ) {
+                        io_cap *= 2;
+                        cheat_io_table = (CIO *) realloc_or_exit(
+                                "cheat_io_table",
+                                cheat_io_table,
+                                io_cap*sizeof(CIO));
+                    }
+                } else if ( c == ' ' || c == '\t' ) {
+                    // Nothing to do
+                } else if ( c == '\n' ) {
+                    state = begin_line;
+                    cheat_table->lines[pid].io_count = 0;
+                    assert( acc == 0 );
+                    pid += 1;
+                } else {
+                    fprintf(stderr, "[warn] read_input (%d): "
+                            "unhandled char: '%c' (%d)\n",
+                            state, c, c);
+                }
+                break;
+            case reading_io_begin:
+                if ( '0' <= c && c <= '9' ) {
+                    acc = 10*acc + c - '0';
+                } else if ( c == '-' ) {
+                    state = io_begin_read;
+                    cheat_io_table[nios].begin = acc;
+                    acc = 0;
+                } else {
+                    fprintf(stderr, "[warn] read_input (%d): "
+                            "unhandled char: '%c' (%d)\n",
+                            state, c, c);
+                }
+                break;
+            case io_begin_read:
+                if ( c == 'D' ) {
+                    state = io_type_read;
+                    cheat_io_table[nios].io_type = IO_Disk;
+                    nios += 1;
+                } else if ( c == 'T' ) {
+                    state = io_type_read;
+                    cheat_io_table[nios].io_type = IO_Tape;
+                    nios += 1;
+                } else if ( c == 'P' ) {
+                    state = io_type_read;
+                    cheat_io_table[nios].io_type = IO_Printer;
+                    nios += 1;
+                } else {
+                    fprintf(stderr, "[warn] read_input (%d): "
+                            "unhandled char: '%c' (%d)\n",
+                            state, c, c);
+                }
+                break;
+            case io_type_read:
+                if ( c == '\n' ) {
+                    state = begin_line;
+                    cheat_table->lines[pid].io_count =
+                        nios - cheat_table->lines[pid].io_start;
+                    pid += 1;
+                } else if ( c == ' ' || c == '\t' ) {
+                    state = service_read;
+                } else {
+                    fprintf(stderr, "[warn] read_input (%d): "
+                            "unhandled char: '%c' (%d)\n",
+                            state, c, c);
+                }
+                break;
+            default:
+                assert( 0 && "unreachable" );
+                break;
+        }
+    }
+    cheat_table->len = pid;
+
+    // print_input(stdout, pid, cap, nios, io_cap);
+
+    *numpcb = pid;
     *numios = nios;
 }
 
