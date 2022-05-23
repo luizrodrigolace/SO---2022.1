@@ -10,8 +10,9 @@
 #include "log.c"
 #include "main.c"
 
+
 // * Criando a tabela com nProcessos dados
-int tabela(int nProcessos){
+CTable* tabela(int nProcessos){
 
     const PID len = nProcessos;
     int sorteioTipoIO;
@@ -23,10 +24,14 @@ int tabela(int nProcessos){
 
     // Criando as linhas da tabela
     for(int i = 0; i < len; i++){
-        cheat_table->lines[i].start = rand() % 4;
-        cheat_table->lines[i].service = rand() % 5;
-        cheat_table->lines[i].io_start = rand() % 10;
-        cheat_table->lines[i].io_count = rand() % 3;
+        //Tempo de inicio do processo será de [0,20]
+        cheat_table->lines[i].start = rand() % 20;
+        // Tempo de serviço randômico entre o número 1 e o Tempo de serviço máximo
+        cheat_table->lines[i].service = (rand() % (Max_TIME_CPU - 1)) + 1;
+
+        cheat_table->lines[i].io_start = cheat_table->lines[i].start + (rand() % 4) + 1;
+        // Quantidade de tipos de I/O que o processo pode ter
+        cheat_table->lines[i].io_count = (rand() % 2) + 1;
     }
 
     // Alocando memoria para a tabela de I/O
@@ -50,4 +55,5 @@ int tabela(int nProcessos){
         
         cheat_io_table->begin = rand()%10;
     }
+    return cheat_table;
 }

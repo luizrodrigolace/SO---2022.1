@@ -19,6 +19,9 @@ typedef u16 time;
 #define TAPE_NUM        2
 #define PRINTER_NUM     3
 
+// Tempo máximo de um processo na cpu
+#define Max_TIME_CPU    20
+
 // Contexto de I/O
 typedef struct _IO_Ctx {
     PID pid;
@@ -125,7 +128,6 @@ const char* io_name(IO_t io) {
 
 // Gerência de Processos:
 // * Novo processo tem o PID do mais recente criado +1
-// * PCB
 
 // Enumerando o estados de um processo
 typedef enum _PCB_Status {
