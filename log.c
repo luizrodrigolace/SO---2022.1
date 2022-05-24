@@ -1,9 +1,11 @@
+// Tipos de eventos que são registrados
 typedef enum _Event_t {
     e_new_pid = 0, e_enter_cpu, e_leave_cpu,
     e_ask_IO, e_start_IO, e_from_IO, e_done
     , e_count
 } Event_t;
 
+// Estrutura do evento
 typedef struct _Event {
     time t;
     PID pid;
@@ -11,6 +13,7 @@ typedef struct _Event {
     IO_t io;
 } Event;
 
+// Cria evento
 Event create_event(const time t, const PID pid,
         const Event_t event, IO_t io) {
     Event ret = { .t = t, .pid = pid, .event = event, io = io, };
@@ -24,6 +27,7 @@ typedef enum _Log_t {
     log_unknown_64 = 0x40, log_unknown_128 = 0x80
 } Log_t;
 
+
 typedef struct _Log_Ctx {
     Log_t type;
 } Log_Ctx;
@@ -33,6 +37,7 @@ void print_log(const Log_Ctx log) {
     printf("\n");
 }
 
+// Printa os eventos na tela
 void log_event(const Log_Ctx log, Event event) {
     assert( log.type == log_sout );
     switch ( event.event ) {
@@ -73,6 +78,7 @@ void log_event(const Log_Ctx log, Event event) {
             break;
     }
 }
+
 
 void log_new_pid(const Log_Ctx log, const time t, const PID pid) {
     log_event(log, create_event(t, pid, e_new_pid, IO_count));
