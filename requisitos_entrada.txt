@@ -1,0 +1,20 @@
+Modelo de cada linha da entrada/tabela
+<tempo de chegada> <tempo de execução>[ <inicio do IO>-<tipo de IO>]*
+
+Onde:
+  * <tempo de chegada> é um número, o tempo em que o processo é iniciado
+  * <tempo de execução> é um número, o tempo total que o processo gasta na CPU
+  * <inicio do IO> é um número, quando o IO vai ser chamado
+  * <tipo de IO> é um caractere das opções:
+    - 'D', representado Disco (Disk)
+    - 'T', representado Fita (Tape)
+    - 'P', representado Impressora (Printer)
+
+Exemplo de entrada:
+0 10 3-T 7-D
+1 6 5-P
+
+Restrições:
+  * As linhas da tabela devem ser ordenadas pelo <tempo de chegada>
+  * A lista de IOs deve ser ordenada pelo <inicio do IO>
+  * Os <inicio do IO>'s devem estar no intervalo (0, <tempo de execução>)
