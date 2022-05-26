@@ -490,6 +490,15 @@ void read_input(u32 *numpcb, u32 *numios) {
                     if ( state == reading_start ) {
                         state = start_read;
                         cheat_table->lines[pid].start = acc;
+                        if ( pid > 0 && cheat_table->lines[pid-1]
+                                .start > acc ) {
+                            fprintf(stderr, "[warn] read_input (%d): "
+                                    "linha não ordenada por chegada: "
+                                    "[%hhu] %hu; [%hhu] %hu\n",
+                                    reading_start, pid-1,
+                                    cheat_table->lines[pid-1].start,
+                                    pid, acc);
+                        }
                     } else if ( state == reading_service ) {
                         state = service_read;
                         cheat_table->lines[pid].service = acc;
@@ -580,6 +589,28 @@ void read_input(u32 *numpcb, u32 *numios) {
                     fprintf(stderr, "[warn] read_input (%d): "
                             "unhandled char: '%c' (%d)\n",
                             state, c, c);
+                }
+                const b32 is_not_first_io =
+                    (pid == 0 && nios-1 > 0)
+                    || (
+                        cheat_table->lines[pid-1].io_start +
+                        cheat_table->lines[pid-1].io_count < nios-1
+                    );
+                if ( state == io_type_read
+                        && is_not_first_io
+                        && cheat_io_table[nios-2].begin
+                            >= cheat_io_table[nios-1].begin ) {
+                    fprintf(stderr, "[warn] read_input (%d): "
+                            "IO não ordenado por início: "
+                            "[%hhu] (%hu) %hu-%s "
+                            "(%hu) %hu-%s\n",
+                            io_begin_read, pid,
+                            nios-2,
+                            cheat_io_table[nios-2].begin,
+                            io_name(cheat_io_table[nios-2].io_type),
+                            nios-1,
+                            cheat_io_table[nios-1].begin,
+                            io_name(cheat_io_table[nios-1].io_type));
                 }
                 break;
             case io_type_read:
