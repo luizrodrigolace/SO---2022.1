@@ -540,7 +540,8 @@ void read_input(u32 *numpcb, u32 *numios) {
                     // Nothing to do
                 } else if ( c == '\n' ) {
                     state = begin_line;
-                    cheat_table->lines[pid].io_count = 0;
+                    cheat_table->lines[pid].io_count =
+                        nios - cheat_table->lines[pid].io_start;
                     assert( acc == 0 );
                     pid += 1;
                 } else {
@@ -602,7 +603,7 @@ void read_input(u32 *numpcb, u32 *numios) {
     }
     cheat_table->len = pid;
 
-    // print_input(stdout, pid, cap, nios, io_cap);
+    print_input(stdout, pid, cap, nios, io_cap);
 
     *numpcb = pid;
     *numios = nios;

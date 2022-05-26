@@ -1,5 +1,5 @@
 Modelo de cada linha da entrada/tabela
-<tempo de chegada> <tempo de execução>[ <inicio do IO>-<tipo de IO>]*
+<tempo de chegada> <tempo de execução>( <inicio do IO>-<tipo de IO>)*\n
 
 Onde:
   * <tempo de chegada> é um número, o tempo em que o processo é iniciado
@@ -9,6 +9,9 @@ Onde:
     - 'D', representado Disco (Disk)
     - 'T', representado Fita (Tape)
     - 'P', representado Impressora (Printer)
+
+Observações:
+    - A última linha da tabela deve terminar com um '\n'
 
 Exemplo de entrada:
 0 10 3-T 7-D
