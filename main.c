@@ -684,6 +684,11 @@ int main() {
     u32 numpcb, numios;
     read_input(&numpcb, &numios);
 
+    if ( numpcb == 0 ) {
+        // Tabela vazia
+        return 0;
+    }
+
     // Alocando memoria
     const u32 numq = 2;
     const u32 queue_size = Queue_sizeof(numpcb);
