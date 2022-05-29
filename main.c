@@ -147,7 +147,6 @@ void handle_new_processes(const time curr_time,
  *  * iodevs: vetor de dispositivos (tamanho IO_count);
  *  * pcbs: vetor de contextos de software;
  *  * numpcb: quantidade de contextos de software.
-TIRANDO DA "FILA DA IMPRESSORA QUE EXECUTA" E COLOCANDO NA FILA DA CPU
  */
 static inline
 void handle_blocked_processes(const time curr_time,
@@ -207,7 +206,6 @@ void handle_blocked_processes(const time curr_time,
     }
 
     // Tirando da fila de espera do I/O e mandando executar
-    // ("COLOCANDO NA FILA DO DISPOSITIVO EXECUTANDO")
     for ( u32 i = 0; i < IO_count; i++ ) {
         const u32 dev_cnt = io_dev_count(i);
         // Tempo de duração do I/O
@@ -228,9 +226,6 @@ void handle_blocked_processes(const time curr_time,
                 // alterando seu contexto
                 iodevs[i].ctx[iodevs[i].next_idx] = dev_ctx;
                 // Colocando este dispositivo na fila de impressoras
-                // ("AQUI ESTAMOS SOMENTE REGISTRANDO
-                // QUE ELA ESTÁ ATIVA MAS ELA FICOU ATIVA
-                // QUANDO MUDAMOS SEU CTX")
                 const Queue_Err qerr =
                     Queue_enqueue(iodevs[i].q, iodevs[i].next_idx);
                 assert( qerr == Queue_Ok );
